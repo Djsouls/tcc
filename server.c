@@ -32,7 +32,6 @@ void clean_buffer(char*);
 void print_message(char*);
 
 int add_to_watchlist(int, int, int);
-int update_from_watchlist(int, int, int);
 int delete_from_watchlist(int, int);
 
 int main() {
@@ -68,7 +67,8 @@ int main() {
                 create_connection(epoll_id, listener);
             }
             else if(input_request(event)) { // Receiving data from an already stablished connection
-                ssize_t bytes_read = recv(event.data.fd, &receive_buffer, BUFFER_SIZE, 0);
+                clean_buffer(receive_buffer);
+                ssize_t bytes_read = recv(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
 
                 if(bytes_read <= 0) {
                     close_connection(event.data.fd, epoll_id);
@@ -77,16 +77,7 @@ int main() {
 
                 print_message(receive_buffer);
 
-                update_from_watchlist(epoll_id, event.data.fd, EPOLLOUT);
-
-            }
-            else if(output_request(event)) {
-                printf("Sending response\n");
-                char response_buffer[BUFFER_SIZE] = "allo World\n";
-
-                send(event.data.fd, response_buffer, BUFFER_SIZE, 0);
-
-                close_connection(event.data.fd, epoll_id);
+                send(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
             }
             else if((event.events & EPOLLERR) || (event.events & EPOLLHUP)) {
                 close_connection(event.data.fd, epoll_id);
@@ -118,16 +109,6 @@ bool output_request(struct epoll_event ev) {
     return (ev.events & EPOLLOUT) == EPOLLOUT;
 }
 
-void close_connection(int client_fd, int epoll_id) {
-    printf("Connection with client %i closed\n", client_fd);
-
-    /* Remove from our watch list*/
-    delete_from_watchlist(epoll_id, client_fd);
-
-    /* Closes the socket */
-    close(client_fd);
-}
-
 /* Add a socket to our epoll watch list */
 int add_to_watchlist(int epoll_id, int socket_fd, int flags) {
     struct epoll_event ev;
@@ -143,23 +124,6 @@ int add_to_watchlist(int epoll_id, int socket_fd, int flags) {
     }
 
     return 0;
-}
-
-/* Updates settings from socket in watch list */
-int update_from_watchlist(int epoll_id, int socket_fd, int flags) {
-    struct epoll_event ev;
-
-    ev.data.fd = socket_fd;
-    ev.events = flags;
-
-    int status = epoll_ctl(epoll_id, EPOLL_CTL_MOD, socket_fd, &ev);
-    if(status < 0) {
-        perror("Error modifying from watchlist");
-
-        return status;
-    }
-
-    return status;
 }
 
 /* Removes a socket from watch list*/
@@ -256,9 +220,19 @@ void create_connection(int epoll_id, int listener_fd) {
 
         /* Make client socket non-blocking */
         fcntl(client, F_SETFL, O_NONBLOCK);
-
+        printf("Created %i\n", client);
         if(add_to_watchlist(epoll_id, client, EPOLLIN) < 0) {
             break;
         }
     }
+}
+
+void close_connection(int client_fd, int epoll_id) {
+    printf("Connection with client %i closed\n", client_fd);
+
+    /* Remove from our watch list*/
+    delete_from_watchlist(epoll_id, client_fd);
+
+    /* Closes the socket */
+    close(client_fd);
 }
