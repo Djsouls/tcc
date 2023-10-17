@@ -131,17 +131,12 @@ bool write_to_file() {
 }
 
 void write_to_latency_file(FILE* file, clock_t begin, clock_t end) {
-    char latency[LATENCY_SIZE];
     double time_spent;
 
     time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     time_spent *= 1000000;
 
-    snprintf(latency, LATENCY_SIZE, "%f", time_spent);
-
-    latency[LATENCY_SIZE - 1] = '\n';
-
-    fwrite(latency, LATENCY_SIZE, 1, file);
+    fprintf(file, "%f\n", time_spent);
 }
 
 void clean_buffer(char* buff) {

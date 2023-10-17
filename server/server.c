@@ -118,9 +118,6 @@ int main() {
 
 /* Counts the number of requests every second */
 void* requests_counter_thread(void* arg) {
-    char count[10];
-    int size;
-
     FILE *file;
     file = fopen("requests_per_second.txt", "w");
 
@@ -130,12 +127,7 @@ void* requests_counter_thread(void* arg) {
         diff = requests_counter - last_read;
         last_read = requests_counter;
  
-        size = (int)((ceil(log10(diff))+1)*sizeof(char));
-        snprintf(count, size, "%d", diff);
-
-        count[9] = '\n';
-
-        fwrite(count, 10, 1, file);
+        fprintf(file, "%i\n", diff);
 
         sleep(1);
     }
