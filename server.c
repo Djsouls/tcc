@@ -2,7 +2,13 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <signal.h>
 #include <unistd.h>
+#include <time.h>
+
+#include <math.h>
+
+#include <pthread.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -12,13 +18,15 @@
 
 #include <netinet/in.h> 
 
+#include "common.h"
+
 #define PORT 8888
 #define BACKLOG 4096
 
-#define BUFFER_SIZE 13
-
 #define MAX_EVENTS 10000
 #define EPOLL_TIMEOUT 3000 // 30 seconds
+
+void* requests_counter_thread(void*);
 
 bool connection_request(struct epoll_event, int);
 bool input_request(struct epoll_event);
@@ -34,8 +42,17 @@ void print_message(char*);
 int add_to_watchlist(int, int, int);
 int delete_from_watchlist(int, int);
 
+void signal_handler(int);
+
+bool done = false;
+
+int requests_counter = 0;
+
 int main() {
-    char receive_buffer[BUFFER_SIZE];
+    signal(SIGINT, signal_handler);
+
+    pthread_t threads[1];
+    pthread_create(&threads[0], NULL, &requests_counter_thread, NULL);
 
     int listener = create_server_socket();
 
@@ -56,8 +73,9 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    char receive_buffer[BUFFER_SIZE];
 
-    while(true) {
+    while(!done) {
         event_count = epoll_wait(epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
         for(int i = 0; i < event_count; i++) {
@@ -75,11 +93,14 @@ int main() {
                     continue;
                 }
 
-                print_message(receive_buffer);
+                // print_message(receive_buffer);
 
                 send(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
+
+                requests_counter++;
             }
             else if((event.events & EPOLLERR) || (event.events & EPOLLHUP)) {
+                printf("Deu ruim\n");
                 close_connection(event.data.fd, epoll_id);
             }
         }
@@ -88,11 +109,37 @@ int main() {
     close(epoll_id);
     close(listener);
 
+    pthread_join(threads[0], NULL);
+
     printf("Byebye\n");
 
     return 0;
 }
 
+/* Counts the number of requests every second */
+void* requests_counter_thread(void* arg) {
+    char count[10];
+    int size;
+
+    FILE *file;
+    file = fopen("requests_per_second.txt", "w");
+
+    while(!done) {
+        size = (int)((ceil(log10(requests_counter))+1)*sizeof(char));
+        snprintf(count, size, "%d", requests_counter);
+        requests_counter = 0;
+
+        count[9] = '\n';
+
+        fwrite(count, 10, 1, file);
+
+        sleep(1);
+    }
+
+    fclose(file);
+
+    return 0;
+}
 
 /* In case is a new connection request */
 bool connection_request(struct epoll_event ev, int listener_fd) {
@@ -220,7 +267,7 @@ void create_connection(int epoll_id, int listener_fd) {
 
         /* Make client socket non-blocking */
         fcntl(client, F_SETFL, O_NONBLOCK);
-        printf("Created %i\n", client);
+
         if(add_to_watchlist(epoll_id, client, EPOLLIN) < 0) {
             break;
         }
@@ -235,4 +282,9 @@ void close_connection(int client_fd, int epoll_id) {
 
     /* Closes the socket */
     close(client_fd);
+}
+
+void signal_handler(int sig) {
+    printf("Handling signal %i...\n", sig);
+    done = true;
 }

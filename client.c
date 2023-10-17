@@ -9,11 +9,10 @@
 #include <pthread.h>
 
 #include "sockets.h"
-
-#define BUFFER_SIZE 13
+#include "common.h"
 
 #define LATENCY_SIZE 10
-#define SLEEP_TIME  150 * 1000 // 1 * 1000 // 1 miliseconds
+#define SLEEP_TIME 1 * 1 // 150 microsseconds
 
 #define MAX_CPUS 16
 
@@ -31,7 +30,7 @@ bool done = false;
 
 int main(int argc, char const* argv[])
 {
-    // int core_limit = 1;
+    int core_limit = 8;
 
     pthread_t threads[MAX_CPUS];
 
@@ -43,15 +42,14 @@ int main(int argc, char const* argv[])
 
     pthread_create(&threads[0], NULL, &latency_thread, NULL);
 
-    // for(int i = 1; i < core_limit + 1; i++) {
-        // pthread_create(&threads[1], NULL, &client_thread, NULL);
-    // }
+    for(int i = 1; i < core_limit + 1; i++) {
+        pthread_create(&threads[1], NULL, &client_thread, NULL);
+    }
 
     pthread_join(threads[0], NULL);
-    client_thread(NULL);
-    // for(int i = 1; i < core_limit + 1; i++) {
-        // pthread_join(threads[1], NULL);
-    // }
+    for(int i = 1; i < core_limit + 1; i++) {
+        pthread_join(threads[i], NULL);
+    }
 
     printf("Properly exited. Bye bye\n");
 
@@ -113,13 +111,13 @@ void* client_thread(void* arg) {
         send(client_fd, hello, strlen(hello), 0);
         recv(client_fd, hello_receive, BUFFER_SIZE, 0); 
 
-        printf("Dun: %i\n", done);
-        sleep(SLEEP_TIME);
+        usleep(SLEEP_TIME);
     }
 
     printf("Finishing client thread\n");
 
     close(client_fd);
+
     return 0;
 }
 
