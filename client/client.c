@@ -8,11 +8,11 @@
 
 #include <pthread.h>
 
-#include "sockets.h"
-#include "common.h"
+#include "../sockets/sockets.h"
+#include "../common/common.h"
 
 #define LATENCY_SIZE 10
-#define SLEEP_TIME 1 * 1 // 150 microsseconds
+#define SLEEP_TIME 10 // 10 microsseconds
 
 #define MAX_CPUS 16
 
@@ -30,7 +30,7 @@ bool done = false;
 
 int main(int argc, char const* argv[])
 {
-    int core_limit = 8;
+    int core_limit = 12;
 
     pthread_t threads[MAX_CPUS];
 
@@ -43,14 +43,14 @@ int main(int argc, char const* argv[])
     pthread_create(&threads[0], NULL, &latency_thread, NULL);
 
     for(int i = 1; i < core_limit + 1; i++) {
-        pthread_create(&threads[1], NULL, &client_thread, NULL);
+        pthread_create(&threads[i], NULL, &client_thread, NULL);
     }
 
     pthread_join(threads[0], NULL);
     for(int i = 1; i < core_limit + 1; i++) {
+        printf("Joining %i\n", i);
         pthread_join(threads[i], NULL);
     }
-
     printf("Properly exited. Bye bye\n");
 
     return 0;

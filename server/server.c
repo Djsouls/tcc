@@ -18,7 +18,7 @@
 
 #include <netinet/in.h> 
 
-#include "common.h"
+#include "../common/common.h"
 
 #define PORT 8888
 #define BACKLOG 4096
@@ -124,10 +124,14 @@ void* requests_counter_thread(void* arg) {
     FILE *file;
     file = fopen("requests_per_second.txt", "w");
 
+    int diff = 0;
+    int last_read = 0;
     while(!done) {
-        size = (int)((ceil(log10(requests_counter))+1)*sizeof(char));
-        snprintf(count, size, "%d", requests_counter);
-        requests_counter = 0;
+        diff = requests_counter - last_read;
+        last_read = requests_counter;
+ 
+        size = (int)((ceil(log10(diff))+1)*sizeof(char));
+        snprintf(count, size, "%d", diff);
 
         count[9] = '\n';
 
