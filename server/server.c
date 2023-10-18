@@ -26,6 +26,8 @@
 #define MAX_EVENTS 10000
 #define EPOLL_TIMEOUT 3000 // 30 seconds
 
+#define RUNTIME 60 // 60 seconds
+
 void* requests_counter_thread(void*);
 
 bool connection_request(struct epoll_event, int);
@@ -118,6 +120,8 @@ int main() {
 
 /* Counts the number of requests every second */
 void* requests_counter_thread(void* arg) {
+    int measures = 0;
+
     FILE *file;
     file = fopen("requests_per_second.txt", "w");
 
@@ -128,6 +132,9 @@ void* requests_counter_thread(void* arg) {
         last_read = requests_counter;
  
         fprintf(file, "%i\n", diff);
+
+        measures++;
+        if(measures > RUNTIME + 1) done = true;
 
         sleep(1);
     }
