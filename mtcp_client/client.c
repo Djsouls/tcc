@@ -97,7 +97,7 @@ void* latency_thread(void* arg) {
 
     printf("%i", ctx->core);
     printf("heh %i", mtcp_client_fd);
-    int client_fd = create_client_socket();
+    //int client_fd = create_client_socket();
 
     char hello[BUFFER_SIZE];
     char hello_receive[BUFFER_SIZE];
@@ -114,10 +114,11 @@ void* latency_thread(void* arg) {
         memset(hello, 'b', BUFFER_SIZE);
 
         begin = clock();
-
+        fprintf(stderr, "cucucucu\n");
         mtcp_write(ctx->mctx, mtcp_client_fd, hello, strlen(hello));
+        fprintf(stderr, "oraora\n");
         mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
-
+        fprintf(stderr, "eraeraera\n");
         end = clock();
 
         if(write_to_file()) {
@@ -129,7 +130,7 @@ void* latency_thread(void* arg) {
 
     printf("Finishing latency thread\n");
 
-    close(client_fd);
+    //close(client_fd);
 
     fclose(file);
 
@@ -145,10 +146,12 @@ int mtcp_create_connection(struct thread_context* ctx) {
         return -1;
     }
 
+    //mtcp_setsock_nonblock(ctx->mctx, client_fd);
+
     struct sockaddr_in addr;
 
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("192.168.1.2");
+    addr.sin_addr.s_addr = inet_addr("192.168.1.1");
     addr.sin_port = htons(PORT);
 
     int ret = mtcp_connect(ctx->mctx, client_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
