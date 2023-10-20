@@ -124,10 +124,12 @@ int main() {
         count = mtcp_epoll_wait(mctx, ctx->epoll_id, mtcp_events, MAX_EVENTS, EPOLL_TIMEOUT);
         for(int i = 0; i < count; i++) {
             if(mtcp_events[i].data.sockid == mtcp_listener) {
-                printf("Requisicao de conexaxo nessa porora");
+                printf("Requisicao de conexaxo nessa porora\n");
+            } else if((mtcp_events[i].events & MTCP_EPOLLIN) == MTCP_EPOLLIN) {
+                printf("Esta na hora de ler vagabudos\n");
             }
 
-            printf("oia os event");
+            printf("oia os event\n");
         }
         printf("Count caralho %i\n", count);
     }
@@ -340,7 +342,7 @@ int mtcp_create_server_socket(struct thread_context* ctx) {
 
     server_address.sin_family = AF_INET;
     //server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_addr.s_addr = inet_addr("10.10.2.1");
+    server_address.sin_addr.s_addr = inet_addr("192.168.1.1");
     server_address.sin_port = htons(PORT);
 
     ret = mtcp_bind(ctx->mctx, listener, 
@@ -391,6 +393,35 @@ struct thread_context* init_server_thread(int core) {
 
 }
 
+void mtcp_create_connection(struct thread_context* ctx, int epoll_id, int listener_fd) {
+    printf("\nCreating MTCP connection...\n");
+
+    int client;
+    struct mtcp_epoll_event ev;
+    //struct sockaddr_in new_addr;
+    //int addr_len = sizeof(struct sockadd_in);
+
+    while(true) {
+        client = mtcp_accept(ctx->mctx, listener_fd, NULL, NULL);    
+        
+        if(client < 0) {
+            /* We have processed all incomming connections. */
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+                break;
+            } else {
+                perror("Could not accept client connection");
+                break;
+            }
+        }
+
+        ev.events = MTCP_EPOLLIN;
+        ev.data.sockid = client;
+
+        mtcp_setsock_nonblock(ctx->mctx, client);
+
+        mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_ADD, client, &ev);
+    }
+}
 
 /* Create a non-blocking connection with an incoming client */
 void create_connection(int epoll_id, int listener_fd) {
