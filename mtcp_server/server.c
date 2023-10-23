@@ -28,11 +28,11 @@
 #include <mtcp_epoll.h>
 /* --------- END MTCP INCLUDES AND STUFF --------------*/
 
-#define PORT 8888
+#define PORT 80
 #define BACKLOG 4096
 
 #define MAX_EVENTS 10000
-#define EPOLL_TIMEOUT 3000 // 30 seconds
+#define EPOLL_TIMEOUT -1 // 30 seconds
 
 #define RUNTIME  60 // 60 seconds
 
@@ -52,8 +52,11 @@ bool output_request(struct epoll_event);
 int create_server_socket();
 int mtcp_create_server_socket(struct thread_context*);
 
-void create_connection();
-void close_connection();
+void mtcp_create_connection(struct thread_context*, int, int);
+void mtcp_close_connection(struct thread_context*, int, int);
+
+int handle_read(struct thread_context*, int, char*);
+
 void clean_buffer(char*);
 void print_message(char*);
 
@@ -106,10 +109,6 @@ int main() {
 
     int mtcp_listener = mtcp_create_server_socket(ctx);
 
-    int listener = create_server_socket();
-    /* Make server socket non-blocking */
-    fcntl(listener, F_SETFL, O_NONBLOCK);
-
     printf("%i\n", mtcp_listener);
 
     struct mtcp_epoll_event ev;
@@ -120,71 +119,53 @@ int main() {
     mtcp_epoll_ctl(ctx->mctx, ctx->epoll_id, MTCP_EPOLL_CTL_ADD, mtcp_listener, &ev);
 
     int count = 0;
-    while(!done) {
-        count = mtcp_epoll_wait(mctx, ctx->epoll_id, mtcp_events, MAX_EVENTS, EPOLL_TIMEOUT);
-        for(int i = 0; i < count; i++) {
-            if(mtcp_events[i].data.sockid == mtcp_listener) {
-                printf("Requisicao de conexaxo nessa porora\n");
-            } else if((mtcp_events[i].events & MTCP_EPOLLIN) == MTCP_EPOLLIN) {
-                printf("Esta na hora de ler vagabudos\n");
-            }
-
-            printf("oia os event\n");
-        }
-        printf("Count caralho %i\n", count);
-    }
-
-    struct epoll_event event, incoming_events[MAX_EVENTS];
-    int epoll_id, event_count;
-
-
-    epoll_id = epoll_create1(0);
-    if(epoll_id < 0) {
-        perror("Error creating epoll file descriptor");
-        exit(EXIT_FAILURE);
-    }
-
-    if(add_to_watchlist(epoll_id, listener, EPOLLIN) < 0) {
-        perror("Error creating initial listener epoll_ctl");
-        exit(EXIT_FAILURE);
-    }
+    int read_count = 0;
 
     char receive_buffer[BUFFER_SIZE];
 
+    struct mtcp_epoll_event event;
+
     while(!done) {
-        event_count = epoll_wait(epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
+        count = mtcp_epoll_wait(mctx, ctx->epoll_id, mtcp_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
-        for(int i = 0; i < event_count; i++) {
-            event = incoming_events[i];
+        for(int i = 0; i < count; i++) {
+            event = mtcp_events[i];
 
-            if(connection_request(event, listener)) {
-                create_connection(epoll_id, listener);
-            }
-            else if(input_request(event)) { // Receiving data from an already stablished connection
+            if(event.data.sockid == mtcp_listener) {
+                printf("Requisicao de conexaxo nessa porora\n");
+                mtcp_create_connection(ctx, ctx->epoll_id, mtcp_listener);
+
+            } else if(event.events & MTCP_EPOLLIN) {
                 clean_buffer(receive_buffer);
-                ssize_t bytes_read = recv(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
 
-                if(bytes_read <= 0) {
-                    close_connection(event.data.fd, epoll_id);
+                int read = mtcp_read(ctx->mctx, event.data.sockid, receive_buffer, BUFFER_SIZE);
+
+                if(read <= 0) {
+                    mtcp_close_connection(ctx, event.data.sockid, ctx->epoll_id);
                     continue;
                 }
 
-                // print_message(receive_buffer);
+                print_message(receive_buffer);
 
-                send(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
+                mtcp_write(ctx->mctx, event.data.sockid, receive_buffer, BUFFER_SIZE);
 
-                requests_counter++;
+                read_count++;
+            } 
+            else if((event.events & MTCP_EPOLLERR) || (event.events & MTCP_EPOLLHUP)) {
+                printf("Deu ruim %i\n", errno);
+                if(errno != EAGAIN) {
+                    printf("Cabo mesmo\n");
+                    mtcp_close_connection(ctx, event.data.sockid, ctx->epoll_id);
+                }
+                printf("Continua oras\n");
             }
-            else if((event.events & EPOLLERR) || (event.events & EPOLLHUP)) {
-                printf("Deu ruim\n");
-                close_connection(event.data.fd, epoll_id);
-            }
+
         }
+        printf("Count caralho %i\n", count);
+        printf("Events: %i\n", event.events);
     }
 
-    close(epoll_id);
-    close(listener);
-
+    mtcp_close(ctx->mctx, mtcp_listener);
     pthread_join(threads[0], NULL);
 
     printf("Byebye\n");
@@ -217,6 +198,7 @@ void* requests_counter_thread(void* arg) {
 
     return 0;
 }
+
 
 /* In case is a new connection request */
 bool connection_request(struct epoll_event ev, int listener_fd) {
@@ -276,47 +258,6 @@ void print_message(char* buff) {
     printf("\n");
 }
 
-int create_server_socket() {
-    int listener, opt = 1;
-
-    /* Setting up listener socket */
-    listener = socket(AF_INET, SOCK_STREAM, 0);
-    if(listener < 0) {
-        perror("Could not create server socket");
-        exit(EXIT_FAILURE);
-    }
-
-    int ret = setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    if(ret <  0) {
-        perror("Could not set socket options to nonblocking");
-        close(listener);
-        exit(EXIT_FAILURE);
-    }
-
-    struct sockaddr_in server_address;
-
-    server_address.sin_family = AF_INET;
-    //server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_addr.s_addr = inet_addr("10.10.2.1");
-    server_address.sin_port = htons(PORT);
-
-    ret = bind(listener, (struct sockaddr *)&server_address, sizeof(struct sockaddr_in));
-
-    if(ret < 0) {
-        perror("Could not bind MTCP socket");
-        close(listener);
-        exit(EXIT_FAILURE);
-    }
-
-    ret = listen(listener, BACKLOG);
-    if(ret < 0) {
-        perror("Could not listen on MTPC socket");
-        close(listener);
-        exit(EXIT_FAILURE);
-    }
-
-    return listener;
-}
 
 
 /* Creates a generic TCP non-blocking socket to be used as
@@ -454,14 +395,14 @@ void create_connection(int epoll_id, int listener_fd) {
     }
 }
 
-void close_connection(int client_fd, int epoll_id) {
+void mtcp_close_connection(struct thread_context* ctx, int client_fd, int epoll_id) {
     printf("Connection with client %i closed\n", client_fd);
 
     /* Remove from our watch list*/
-    delete_from_watchlist(epoll_id, client_fd);
+    mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_DEL, client_fd, NULL);
 
     /* Closes the socket */
-    close(client_fd);
+    mtcp_close(ctx->mctx, client_fd);
 }
 
 void signal_handler(int sig) {
