@@ -156,9 +156,9 @@ void* latency_thread(void* arg) {
                 mtcp_write(ctx->mctx, mtcp_client_fd, hello, BUFFER_SIZE);
 
                 event.events = MTCP_EPOLLIN;
-                event.data.sockid = mtcp_client_fd;
+                event.data.sockid = ev.data.sockid;
 
-                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, ev.data.sockid, &event);
             } else if(incoming_events[i].events & MTCP_EPOLLIN) {
                 printf("Indo ler...\n");
 
