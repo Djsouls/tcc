@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <time.h>
 
+#include <errno.h>
+
 #include <pthread.h>
 
 #include <arpa/inet.h>
@@ -19,12 +21,16 @@
 #define LATENCY_SIZE 10
 #define SLEEP_TIME 10 // 10 microsseconds
 
+#define MAX_EVENTS 10000
+#define EPOLL_TIMEOUT -1 // 30 seconds
+
 #define MAX_CPUS 16
 
-#define PORT 8888
+#define PORT 80
 
 struct thread_context {
     int core;
+    int epoll_id;
     mctx_t mctx;
 };
 
@@ -91,46 +97,91 @@ int main(int argc, char const* argv[])
 }
 
 void* latency_thread(void* arg) {
+    mtcp_core_affinitize(0);
+    
     struct thread_context* ctx = create_context(0);
 
-    int mtcp_client_fd = mtcp_create_connection(ctx);
+    struct mtcp_epoll_event event, incoming_events[MAX_EVENTS];
+    int epoll_id, event_count;
 
-    printf("%i", ctx->core);
-    printf("heh %i", mtcp_client_fd);
-    //int client_fd = create_client_socket();
+    epoll_id = mtcp_epoll_create(ctx->mctx, MAX_EVENTS);
+    ctx->epoll_id = epoll_id;
+    if(epoll_id < 0) {
+        perror("Deu ruim criando o epoll");
+        exit(EXIT_FAILURE);
+    }
+
+    int mtcp_client_fd = mtcp_create_connection(ctx);
 
     char hello[BUFFER_SIZE];
     char hello_receive[BUFFER_SIZE];
 
-    clock_t begin, end;
+    clock_t begin = clock(), end = clock();
 
     FILE *file;
     file = fopen("latency.txt", "w");
+
+    struct mtcp_epoll_event ev;
 
     while(!done) {
         clean_buffer(hello);
         clean_buffer(hello_receive);
 
-        memset(hello, 'b', BUFFER_SIZE);
+        event_count = mtcp_epoll_wait(ctx->mctx, epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
+        printf("Event count: %i\n", event_count);
 
-        begin = clock();
-        fprintf(stderr, "cucucucu\n");
-        mtcp_write(ctx->mctx, mtcp_client_fd, hello, strlen(hello));
-        fprintf(stderr, "oraora\n");
-        mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
-        fprintf(stderr, "eraeraera\n");
-        end = clock();
+        for(int i = 0; i < event_count; i++) {
+            ev = incoming_events[i];
 
-        if(write_to_file()) {
-            write_to_latency_file(file, begin, end);
+            printf("events: %i\n", ev.events);
+
+            if(ev.events & MTCP_EPOLLERR) {
+                printf("Deu merda aqui menor\n");
+                int err;
+                socklen_t len = sizeof(err);
+
+                if (mtcp_getsockopt(ctx->mctx, event.data.sockid,
+							SOL_SOCKET, SO_ERROR, (void *)&err, &len) == 0) {
+                    printf("Erro: %i\n", err);
+
+                }
+            }
+            else if(incoming_events[i].events == MTCP_EPOLLOUT) {
+                printf("Indo escrever...\n");
+
+                memset(hello, 'b', BUFFER_SIZE);
+
+                begin = clock();
+
+                mtcp_write(ctx->mctx, mtcp_client_fd, hello, BUFFER_SIZE);
+
+                event.events = MTCP_EPOLLIN;
+                event.data.sockid = mtcp_client_fd;
+
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
+            } else if(incoming_events[i].events & MTCP_EPOLLIN) {
+                printf("Indo ler...\n");
+
+                mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
+                end = clock();
+
+                if(write_to_file()) {
+                    write_to_latency_file(file, begin, end);
+                }
+
+                event.events = MTCP_EPOLLOUT;
+                event.data.sockid = mtcp_client_fd;
+
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
+            }
         }
-
-        usleep(SLEEP_TIME);
+        //printf("Esperando...\n");
+        //sleep(2);
+        usleep(10);
     }
 
     printf("Finishing latency thread\n");
-
-    //close(client_fd);
+    mtcp_close(ctx->mctx, mtcp_client_fd);
 
     fclose(file);
 
@@ -146,7 +197,7 @@ int mtcp_create_connection(struct thread_context* ctx) {
         return -1;
     }
 
-    //mtcp_setsock_nonblock(ctx->mctx, client_fd);
+    mtcp_setsock_nonblock(ctx->mctx, client_fd);
 
     struct sockaddr_in addr;
 
@@ -155,11 +206,18 @@ int mtcp_create_connection(struct thread_context* ctx) {
     addr.sin_port = htons(PORT);
 
     int ret = mtcp_connect(ctx->mctx, client_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
-    if(ret < 0) {
+    if(ret < 0 && errno != EINPROGRESS) {
         mtcp_close(ctx->mctx, client_fd);
         fprintf(stderr, "CUUUUUUUUUUUUUUU FALHOU NA CONEXAO");
         return -1;
     }
+
+    struct mtcp_epoll_event event;
+
+    event.events = MTCP_EPOLLOUT;
+    event.data.sockid = client_fd;
+
+    mtcp_epoll_ctl(ctx->mctx, ctx->epoll_id, MTCP_EPOLL_CTL_ADD, client_fd, &event);
 
     return client_fd;
 }
@@ -191,8 +249,6 @@ void* client_thread(void* arg) {
 
 struct thread_context* create_context(int core) {
     struct thread_context* ctx;
-
-    mtcp_core_affinitize(core);
 
     ctx = (struct thread_context *)calloc(1, sizeof(struct thread_context));
     if(!ctx) {
