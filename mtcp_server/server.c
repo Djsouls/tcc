@@ -34,7 +34,7 @@
 #define MAX_EVENTS 10000
 #define EPOLL_TIMEOUT -1 // 30 seconds
 
-#define RUNTIME  60 // 60 seconds
+#define RUNTIME  115 // 60 seconds
 
 #define MAX_CPUS 32
 
@@ -109,8 +109,6 @@ int main() {
 
     int mtcp_listener = mtcp_create_server_socket(ctx);
 
-    printf("%i\n", mtcp_listener);
-
     struct mtcp_epoll_event ev;
     struct mtcp_epoll_event mtcp_events[MAX_EVENTS];
 
@@ -119,13 +117,14 @@ int main() {
     mtcp_epoll_ctl(ctx->mctx, ctx->epoll_id, MTCP_EPOLL_CTL_ADD, mtcp_listener, &ev);
 
     int count = 0;
-    int read_count = 0;
 
     char receive_buffer[BUFFER_SIZE];
 
     struct mtcp_epoll_event event;
 
+    printf("Ready to handle business\n");
     while(!done) {
+
         count = mtcp_epoll_wait(mctx, ctx->epoll_id, mtcp_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
         for(int i = 0; i < count; i++) {
@@ -145,11 +144,11 @@ int main() {
                     continue;
                 }
 
-                print_message(receive_buffer);
+                //print_message(receive_buffer);
 
                 mtcp_write(ctx->mctx, event.data.sockid, receive_buffer, BUFFER_SIZE);
 
-                read_count++;
+                requests_counter++;
             } 
             else if((event.events & MTCP_EPOLLERR) || (event.events & MTCP_EPOLLHUP)) {
                 printf("Deu ruim %i\n", errno);
@@ -161,12 +160,14 @@ int main() {
             }
 
         }
-        printf("Count caralho %i\n", count);
-        printf("Events: %i\n", event.events);
+        //printf("Count caralho %i\n", count);
+        //printf("Events: %i\n", event.events);
     }
 
     mtcp_close(ctx->mctx, mtcp_listener);
     pthread_join(threads[0], NULL);
+
+    mtcp_destroy();
 
     printf("Byebye\n");
 
@@ -182,6 +183,7 @@ void* requests_counter_thread(void* arg) {
 
     int diff = 0;
     int last_read = 0;
+
     while(!done) {
         diff = requests_counter - last_read;
         last_read = requests_counter;
@@ -189,7 +191,10 @@ void* requests_counter_thread(void* arg) {
         fprintf(file, "%i\n", diff);
 
         measures++;
-        if(measures > RUNTIME + 1) done = true;
+        if(measures > RUNTIME + 1) {
+            done = true;
+            printf("Stopping benchmark...\n");
+        }
 
         sleep(1);
     }
@@ -339,8 +344,6 @@ void mtcp_create_connection(struct thread_context* ctx, int epoll_id, int listen
 
     int client;
     struct mtcp_epoll_event ev;
-    //struct sockaddr_in new_addr;
-    //int addr_len = sizeof(struct sockadd_in);
 
     while(true) {
         client = mtcp_accept(ctx->mctx, listener_fd, NULL, NULL);    
@@ -361,37 +364,6 @@ void mtcp_create_connection(struct thread_context* ctx, int epoll_id, int listen
         mtcp_setsock_nonblock(ctx->mctx, client);
 
         mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_ADD, client, &ev);
-    }
-}
-
-/* Create a non-blocking connection with an incoming client */
-void create_connection(int epoll_id, int listener_fd) {
-    printf("\nCreating connection...\n");
-
-    int client;
-    struct sockaddr_in new_addr;
-    int addr_len = sizeof(struct sockaddr_in);
-
-    while(true) {
-        client = accept(listener_fd, (struct sockaddr*)&new_addr,
-                    (socklen_t *)&addr_len);
-
-        if (client < 0) {
-            /* We have processed all incoming connections. */
-            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-                break;
-            } else {
-                perror("Could not accept client connection");
-                break;
-            }
-        }
-
-        /* Make client socket non-blocking */
-        fcntl(client, F_SETFL, O_NONBLOCK);
-
-        if(add_to_watchlist(epoll_id, client, EPOLLIN) < 0) {
-            break;
-        }
     }
 }
 
