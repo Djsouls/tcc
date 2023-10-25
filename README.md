@@ -35,8 +35,11 @@ Implementação de um [servidor Echo](https://medium.com/@himalee.tailor/what-is
 ```
 
 `client` e `server`: Possuem o código fonte para a versão do protótipo que utiliza as funcionalidades disponibilizadas pelo Kernel
+
 `mtcp_client` e `mtcp_server`: Possuem a versão do protótipo que utiliza a biblioteca mTCP
+
 `common` e `sockets`: Possuem código que pode ser reutilizado pelos dois protótipos
+
 `results`: Guarda os arquivos de resultados após os testes feitos. O formato dos arquivos é o que segue; `(latency│requests)_S<n_servers>_C<n_clients>_P<payload_size>.txt`. Onde `n_servers` é o número de threads utilizadas por servidor, `n_clients` é o número de threads utilizadas pelo cliente e `payload_size` é o tamanho do payload utilizado para os testes.
 
 ## Executando
