@@ -63,14 +63,15 @@ int main() {
     pthread_create(&threads[MAX_CPUS], NULL, &requests_counter_thread, NULL);
 
     int cores[MAX_CPUS];
-    for(int i = 0; i < 2; i++) {
+    int n_servers = 2;
+    for(int i = 0; i < n_servers; i++) {
         cores[i] = i;
         pthread_create(&threads[i], NULL, &run_server, (void*) &cores[i]);
     }
 
     pthread_join(threads[MAX_CPUS], NULL);
 
-    for(int i = 0; i < 2; i++) {
+    for(int i = 0; i < n_servers; i++) {
         pthread_join(threads[i], NULL);
     }
 
@@ -103,6 +104,7 @@ void* run_server(void* arg) {
 
     char receive_buffer[BUFFER_SIZE];
 
+    printf("Running server at core %i\n", core);
     while(!done) {
         event_count = epoll_wait(epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
@@ -249,7 +251,7 @@ int create_server_socket() {
         exit(EXIT_FAILURE);
     }
 
-    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
+    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT ,
         &opt, sizeof(opt)) == -1) {
     
         perror("Could not set socket options");
@@ -282,7 +284,7 @@ int create_server_socket() {
 
 /* Create a non-blocking connection with an incoming client */
 void create_connection(int epoll_id, int listener_fd) {
-    printf("\nCreating connection...\n");
+    // printf("\nCreating connection...\n");
 
     int client;
     struct sockaddr_in new_addr;
@@ -312,7 +314,7 @@ void create_connection(int epoll_id, int listener_fd) {
 }
 
 void close_connection(int client_fd, int epoll_id) {
-    printf("Connection with client %i closed\n", client_fd);
+    // printf("Connection with client %i closed\n", client_fd);
 
     /* Remove from our watch list*/
     delete_from_watchlist(epoll_id, client_fd);
