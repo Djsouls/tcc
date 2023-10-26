@@ -28,7 +28,12 @@
 
 #define RUNTIME 60 // 60 seconds
 
+#define MAX_CPUS 32
+
+void* run_server(void*);
 void* requests_counter_thread(void*);
+
+int sum_requests();
 
 bool connection_request(struct epoll_event, int);
 bool input_request(struct epoll_event);
@@ -48,13 +53,34 @@ void signal_handler(int);
 
 bool done = false;
 
-int requests_counter = 0;
+int requests_per_core[MAX_CPUS] = {0};
 
 int main() {
     signal(SIGINT, signal_handler);
 
-    pthread_t threads[1];
-    pthread_create(&threads[0], NULL, &requests_counter_thread, NULL);
+    pthread_t threads[MAX_CPUS + 1]; // One for each server instance and one for the latency thread
+
+    pthread_create(&threads[MAX_CPUS], NULL, &requests_counter_thread, NULL);
+
+    int cores[MAX_CPUS];
+    for(int i = 0; i < 2; i++) {
+        cores[i] = i;
+        pthread_create(&threads[i], NULL, &run_server, (void*) &cores[i]);
+    }
+
+    pthread_join(threads[MAX_CPUS], NULL);
+
+    for(int i = 0; i < 2; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    printf("Byebye\n");
+
+    return 0;
+}
+
+void* run_server(void* arg) {
+    int core = *(int *)arg;
 
     int listener = create_server_socket();
 
@@ -99,7 +125,7 @@ int main() {
 
                 send(event.data.fd, receive_buffer, BUFFER_SIZE, 0);
 
-                requests_counter++;
+                requests_per_core[core]++;
             }
             else if((event.events & EPOLLERR) || (event.events & EPOLLHUP)) {
                 printf("Deu ruim\n");
@@ -110,10 +136,6 @@ int main() {
 
     close(epoll_id);
     close(listener);
-
-    pthread_join(threads[0], NULL);
-
-    printf("Byebye\n");
 
     return 0;
 }
@@ -127,7 +149,10 @@ void* requests_counter_thread(void* arg) {
 
     int diff = 0;
     int last_read = 0;
+    int requests_counter = 0;
     while(!done) {
+        requests_counter = sum_requests();
+
         diff = requests_counter - last_read;
         last_read = requests_counter;
  
@@ -142,6 +167,15 @@ void* requests_counter_thread(void* arg) {
     fclose(file);
 
     return 0;
+}
+
+int sum_requests() {
+    int total = 0;
+    for(int i = 0; i < MAX_CPUS; i++) {
+        total += requests_per_core[i];
+    }
+
+    return total;
 }
 
 /* In case is a new connection request */
