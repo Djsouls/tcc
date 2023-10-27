@@ -81,11 +81,13 @@ static pthread_t threads[MAX_CPUS + 1];
 int requests_per_core[MAX_CPUS] = {0};
 
 int main() {
+    int n_servers = 1;
+    int num_cores = (n_servers >= MAX_CPUS) ? MAX_CPUS : n_servers;
 
  /* ---- Setting up MTCP ----*/
     struct mtcp_conf mcfg;
     mtcp_getconf(&mcfg);
-    mcfg.num_cores = 1;
+    mcfg.num_cores = num_cores;
     mtcp_setconf(&mcfg);
 
     conf_file = "server.conf";
@@ -104,7 +106,10 @@ int main() {
     pthread_create(&threads[MAX_CPUS], NULL, &requests_counter_thread, NULL);
 
     int cores[MAX_CPUS];
-    int n_servers = 1;
+    for(int i = 0; i < n_servers; i++) {
+        cores[i] = i;
+        pthread_create(&threads[i], NULL, &run_server, (void*) &cores[i]);
+    }
 
     pthread_join(threads[MAX_CPUS], NULL);
 
