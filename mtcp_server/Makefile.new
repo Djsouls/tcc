@@ -1,6 +1,6 @@
 # TODO: Make this Makefile.in pretty
 
-TARGETS = client
+TARGETS = new_server
 CC=gcc -g -O3 -Wall -Werror -fgnu89-inline
 DPDK=1
 PS=0
@@ -25,7 +25,7 @@ UTIL_INC = -I${UTIL_FLD}/include
 UTIL_OBJ = ${UTIL_FLD}/http_parsing.o ${UTIL_FLD}/tdate_parse.o ${UTIL_FLD}/netlib.o
 
 # util library and header
-INC = -I./include/ ${MTCP_INC}
+INC = -I./include/ ${UTIL_INC} ${MTCP_INC} -I${UTIL_FLD}/include
 LIBS = ${MTCP_LIB}
 
 # psio-specific variables
@@ -76,15 +76,15 @@ LIBS += -L$(LIBCCP) -lccp -lstartccp
 INC += -I$(LIBCCP)
 endif
 
-all: client
+all: new_server
 
-client.o: client.c ../sockets/sockets.c
+new_server.o: new_server.c
 	$(MSG) "   CC $<"
-	$(HIDE) ${CC} -c $< ${CFLAGS} ../sockets/sockets.c  ${INC}
+	$(HIDE) ${CC} -c $< ${CFLAGS} ${INC}
 
-client: client.o ../sockets/sockets.c ${MTCP_FLD}/lib/libmtcp.a
+new_server: new_server.o ${MTCP_FLD}/lib/libmtcp.a
 	$(MSG) "   LD $<"
-	$(HIDE) ${CC} $< ${LIBS} -o $@ ../sockets/sockets.c
+	$(HIDE) ${CC} $< ${LIBS} -o $@
 
 clean:
 	$(MSG) "   CLEAN $(TARGETS)"

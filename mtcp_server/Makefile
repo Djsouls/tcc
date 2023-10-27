@@ -1,6 +1,6 @@
 # TODO: Make this Makefile.in pretty
 
-TARGETS = new_server
+TARGETS = server
 CC=gcc -g -O3 -Wall -Werror -fgnu89-inline
 DPDK=1
 PS=0
@@ -76,13 +76,13 @@ LIBS += -L$(LIBCCP) -lccp -lstartccp
 INC += -I$(LIBCCP)
 endif
 
-all: new_server
+all: server
 
-new_server.o: new_server.c
+server.o: server.c
 	$(MSG) "   CC $<"
 	$(HIDE) ${CC} -c $< ${CFLAGS} ${INC}
 
-new_server: new_server.o ${MTCP_FLD}/lib/libmtcp.a
+server: server.o ${MTCP_FLD}/lib/libmtcp.a
 	$(MSG) "   LD $<"
 	$(HIDE) ${CC} $< ${LIBS} -o $@
 
