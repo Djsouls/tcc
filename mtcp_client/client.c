@@ -23,7 +23,7 @@
 #define MAX_EVENTS 10000
 #define EPOLL_TIMEOUT -1 // 30 seconds
 
-#define MAX_CPUS 33
+#define MAX_CPUS 32
 
 #define PORT 80
 
@@ -56,12 +56,14 @@ static pthread_t threads[MAX_CPUS];
 
 int main(int argc, char const* argv[])
 {
-    int core_limit = 1;
 
     struct mtcp_conf mcfg;
 
+    int core_limit = 1;
+    int num_cores = (core_limit >= MAX_CPUS) ? MAX_CPUS : core_limit + 1;
+
     mtcp_getconf(&mcfg);
-    mcfg.num_cores = core_limit + 1;
+    mcfg.num_cores = num_cores;
     mtcp_setconf(&mcfg);
 
     conf_file = "client.conf";
