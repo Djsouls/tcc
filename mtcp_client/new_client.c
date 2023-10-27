@@ -209,7 +209,10 @@ void* client_thread(void* arg) {
 
     struct mtcp_epoll_event ev;
     while(!done) {
-        int mtcp_client_fd = mtcp_create_connection(ctx);
+        int ret = mtcp_create_connection(ctx);
+        if(ret < 0) {
+            done = true;
+        }
 
         event_count = mtcp_epoll_wait(ctx->mctx, epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
@@ -255,6 +258,7 @@ int send_request(struct thread_context* ctx, int epoll_id, int socket_fd) {
 
     mtcp_write(ctx->mctx, socket_fd, hello, BUFFER_SIZE);
 
+    struct mtcp_epoll_event event;
     event.events = MTCP_EPOLLIN;
     event.data.sockid = socket_fd;
 
@@ -270,7 +274,7 @@ int receive_request(struct thread_context* ctx, int epoll_id, int socket_fd) {
 
     mtcp_read(ctx->mctx, socket_fd, hello_receive, BUFFER_SIZE);
 
-    mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, ev.data.sockid, NULL);
+    mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, socket_fd, NULL);
 
     return 0;
 }
