@@ -1,6 +1,6 @@
 # TODO: Make this Makefile.in pretty
 
-TARGETS = client
+TARGETS = new_client
 CC=gcc -g -O3 -Wall -Werror -fgnu89-inline
 DPDK=1
 PS=0
@@ -76,13 +76,13 @@ LIBS += -L$(LIBCCP) -lccp -lstartccp
 INC += -I$(LIBCCP)
 endif
 
-all: client 
+all: new_client
 
-client.o: client.c ../sockets/sockets.c
+new_client.o: new_client.c ../sockets/sockets.c
 	$(MSG) "   CC $<"
 	$(HIDE) ${CC} -c $< ${CFLAGS} ../sockets/sockets.c  ${INC}
 
-client: client.o ../sockets/sockets.c ${MTCP_FLD}/lib/libmtcp.a
+new_client: new_client.o ../sockets/sockets.c ${MTCP_FLD}/lib/libmtcp.a
 	$(MSG) "   LD $<"
 	$(HIDE) ${CC} $< ${LIBS} -o $@ ../sockets/sockets.c
 
