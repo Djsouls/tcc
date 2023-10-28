@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#define PORT 8888
+#define PORT 80
 
 int create_client_socket();
 

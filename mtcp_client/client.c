@@ -59,7 +59,7 @@ int main(int argc, char const* argv[])
 
     struct mtcp_conf mcfg;
 
-    int core_limit = 1;
+    int core_limit = 5;
     int num_cores = (core_limit >= MAX_CPUS) ? MAX_CPUS : core_limit + 1;
 
     mtcp_getconf(&mcfg);
@@ -238,13 +238,15 @@ void* client_thread(void* arg) {
         exit(EXIT_FAILURE);
     }
 
-    int mtcp_client_fd = mtcp_create_connection(ctx);
+    for(int i = 0; i < 4000; i++) {
+        mtcp_create_connection(ctx);
+    }
 
     char hello[BUFFER_SIZE];
     char hello_receive[BUFFER_SIZE];
 
     struct mtcp_epoll_event ev;
-    int writes = 0;
+
     while(!done) {
         clean_buffer(hello);
         clean_buffer(hello_receive);
@@ -259,39 +261,38 @@ void* client_thread(void* arg) {
                 int err;
                 socklen_t len = sizeof(err);
 
-                if (mtcp_getsockopt(ctx->mctx, event.data.sockid,
+                if (mtcp_getsockopt(ctx->mctx, ev.data.sockid,
 							SOL_SOCKET, SO_ERROR, (void *)&err, &len) == 0) {
                     printf("Erro: %i\n", err);
 
                 }
             }
-            else if(incoming_events[i].events == MTCP_EPOLLOUT) {
+            else if(ev.events == MTCP_EPOLLOUT) {
                 memset(hello, 'b', BUFFER_SIZE);
-                //printf("Enviando client\n");
-                mtcp_write(ctx->mctx, mtcp_client_fd, hello, BUFFER_SIZE);
-                writes++;
-                //sleep(2);
+
+                mtcp_write(ctx->mctx, ev.data.sockid, hello, BUFFER_SIZE);
+
                 event.events = MTCP_EPOLLIN;
                 event.data.sockid = ev.data.sockid;
 
                 mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, ev.data.sockid, &event);
-            } else if(incoming_events[i].events & MTCP_EPOLLIN) {
-                mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
+            } else if(ev.events & MTCP_EPOLLIN) {
+                mtcp_read(ctx->mctx, ev.data.sockid, hello_receive, BUFFER_SIZE);
 
                 event.events = MTCP_EPOLLOUT;
-                event.data.sockid = mtcp_client_fd;
+                event.data.sockid = ev.data.sockid;
 
-                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, ev.data.sockid, &event);
             }
         }
         usleep(SLEEP_TIME);
     }
 
     printf("Finishing client thread\n");
-    printf("Total writes: %i\n", writes);
+
 
     mtcp_destroy_context(ctx->mctx);
-    mtcp_close(ctx->mctx, mtcp_client_fd);
+
     free(ctx);
     
     return 0;
