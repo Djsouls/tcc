@@ -81,7 +81,7 @@ static pthread_t threads[MAX_CPUS + 1];
 int requests_per_core[MAX_CPUS] = {0};
 
 int main() {
-    int n_servers = 1;
+    int n_servers = 5;
     int num_cores = (n_servers >= MAX_CPUS) ? MAX_CPUS : n_servers;
 
  /* ---- Setting up MTCP ----*/
@@ -362,7 +362,7 @@ struct thread_context* init_server_thread(int core) {
 }
 
 void mtcp_create_connection(struct thread_context* ctx, int epoll_id, int listener_fd) {
-    printf("\nCreating MTCP connection...\n");
+    //printf("\nCreating MTCP connection...\n");
 
     int client;
     struct mtcp_epoll_event ev;

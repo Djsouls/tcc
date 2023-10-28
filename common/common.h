@@ -1,1 +1,1 @@
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 2048

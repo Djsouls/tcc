@@ -15,7 +15,7 @@ LIBS += -m64
 endif
 
 # mtcp library and header 
-MTCP_FLD    =../../../../mtcp/
+MTCP_FLD    =../../../mtcp/
 MTCP_INC    =-I${MTCP_FLD}/include
 MTCP_LIB    =-L${MTCP_FLD}/lib
 MTCP_TARGET = ${MTCP_LIB}/libmtcp.a
