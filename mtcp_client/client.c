@@ -186,6 +186,40 @@ void* latency_thread(void* arg) {
     return 0;
 }
 
+int mtcp_create_connection(struct thread_context* ctx) {
+    int client_fd;
+
+    client_fd = mtcp_socket(ctx->mctx, AF_INET, SOCK_STREAM, 0);
+    if(client_fd < 0) {
+        fprintf(stderr, "Deu ruim criando o socket client...");
+        return -1;
+    }
+
+    mtcp_setsock_nonblock(ctx->mctx, client_fd);
+
+    struct sockaddr_in addr;
+
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("192.168.1.1");
+    addr.sin_port = htons(PORT);
+
+    int ret = mtcp_connect(ctx->mctx, client_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
+    if(ret < 0 && errno != EINPROGRESS) {
+        mtcp_close(ctx->mctx, client_fd);
+        fprintf(stderr, "CUUUUUUUUUUUUUUU CLIENTE %i FALHOU NA CONEXAO %i\n", ctx->core, errno);
+        return -1;
+    }
+
+    struct mtcp_epoll_event event;
+
+    event.events = MTCP_EPOLLOUT;
+    event.data.sockid = client_fd;
+
+    mtcp_epoll_ctl(ctx->mctx, ctx->epoll_id, MTCP_EPOLL_CTL_ADD, client_fd, &event);
+
+    return client_fd;
+}
+
 void* client_thread(void* arg) {
     int core = *(int *)arg;
 
