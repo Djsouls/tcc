@@ -170,14 +170,12 @@ void* run_server(void* arg) {
                 mtcp_write(ctx->mctx, event.data.sockid, receive_buffer, BUFFER_SIZE);
 
                 requests_per_core[core]++;
-            } 
+            }
             else if((event.events & MTCP_EPOLLERR) || (event.events & MTCP_EPOLLHUP)) {
-                printf("Deu ruim %i\n", errno);
                 if(errno != EAGAIN) {
                     printf("Cabo mesmo\n");
                     mtcp_close_connection(ctx, event.data.sockid, ctx->epoll_id);
                 }
-                printf("Continua oras\n");
             }
 
         }
@@ -199,7 +197,7 @@ void* requests_counter_thread(void* arg) {
     int last_read = 0;
     int requests_counter = 0;
     while(!done) {
-        requests_counter = sum__requests();
+        requests_counter = sum_requests();
 
         diff = requests_counter - last_read;
         last_read = requests_counter;
