@@ -38,9 +38,6 @@ void clean_buffer(char*);
 void* client_thread(void*);
 void* latency_thread(void*);
 
-int handle_send_request(struct thread_context*, int, int);
-int handle_receive_request(struct thread_context*, int, int);
-
 bool write_to_file();
 void write_to_latency_file(FILE*, clock_t, clock_t);
 
@@ -83,22 +80,21 @@ int main(int argc, char const* argv[])
     // Initializes PRNG
     srandom(time(NULL));
 
-    pthread_create(&threads[MAX_CPUS], NULL, &latency_thread, NULL);
-
-    for(int i = 0; i < core_limit; i++) {
+    for(int i = 1; i < core_limit + 1; i++) {
         cores[i] = i;
         pthread_create(&threads[i], NULL, &client_thread, (void*) &cores[i]);
     }
 
-
-    pthread_join(threads[MAX_CPUS], NULL);
+    pthread_create(&threads[0], NULL, &latency_thread, NULL);
+    pthread_join(threads[0], NULL);
     for(int i = 1; i < core_limit + 1; i++) {
         printf("Joining %i\n", i);
         pthread_join(threads[i], NULL);
     }
 
-    mtcp_destroy();
 
+    mtcp_destroy();
+    
     printf("Properly exited. Bye bye\n");
 
     return 0;
@@ -198,7 +194,7 @@ void* client_thread(void* arg) {
     struct thread_context* ctx = create_context(core);
     ctx->core = core;
 
-    struct mtcp_epoll_event incoming_events[MAX_EVENTS];
+    struct mtcp_epoll_event event, incoming_events[MAX_EVENTS];
     int epoll_id, event_count;
 
     epoll_id = mtcp_epoll_create(ctx->mctx, MAX_EVENTS);
@@ -208,28 +204,23 @@ void* client_thread(void* arg) {
         exit(EXIT_FAILURE);
     }
 
-    mtcp_create_connection(ctx);
+    int mtcp_client_fd = mtcp_create_connection(ctx);
+
+    char hello[BUFFER_SIZE];
+    char hello_receive[BUFFER_SIZE];
 
     struct mtcp_epoll_event ev;
+    int writes = 0;
     while(!done) {
+        clean_buffer(hello);
+        clean_buffer(hello_receive);
 
         event_count = mtcp_epoll_wait(ctx->mctx, epoll_id, incoming_events, MAX_EVENTS, EPOLL_TIMEOUT);
 
         for(int i = 0; i < event_count; i++) {
             ev = incoming_events[i];
 
-            if(ev.events == MTCP_EPOLLOUT) {
-                handle_send_request(ctx, epoll_id, ev.data.sockid);
-            } else if(ev.events & MTCP_EPOLLIN) {
-                handle_receive_request(ctx, epoll_id, ev.data.sockid);
-
-                // mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
-
-                // event.events = MTCP_EPOLLOUT;
-                // event.data.sockid = mtcp_client_fd;
-
-                // mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
-            } else if(ev.events & MTCP_EPOLLERR) {
+            if(ev.events & MTCP_EPOLLERR) {
                 printf("Deu merda aqui menor\n");
                 int err;
                 socklen_t len = sizeof(err);
@@ -240,8 +231,25 @@ void* client_thread(void* arg) {
 
                 }
             }
-        }
+            else if(incoming_events[i].events == MTCP_EPOLLOUT) {
+                memset(hello, 'b', BUFFER_SIZE);
+                //printf("Enviando client\n");
+                mtcp_write(ctx->mctx, mtcp_client_fd, hello, BUFFER_SIZE);
+                writes++;
+                //sleep(2);
+                event.events = MTCP_EPOLLIN;
+                event.data.sockid = ev.data.sockid;
 
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, ev.data.sockid, &event);
+            } else if(incoming_events[i].events & MTCP_EPOLLIN) {
+                mtcp_read(ctx->mctx, mtcp_client_fd, hello_receive, BUFFER_SIZE);
+
+                event.events = MTCP_EPOLLOUT;
+                event.data.sockid = mtcp_client_fd;
+
+                mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, mtcp_client_fd, &event);
+            }
+        }
         usleep(SLEEP_TIME);
     }
 
@@ -249,75 +257,10 @@ void* client_thread(void* arg) {
     printf("Total writes: %i\n", writes);
 
     mtcp_destroy_context(ctx->mctx);
+    mtcp_close(ctx->mctx, mtcp_client_fd);
     free(ctx);
     
     return 0;
-}
-
-int handle_send_request(struct thread_context* ctx, int epoll_id, int socket_fd) {
-    char hello[BUFFER_SIZE];
-    clean_buffer(hello);
-
-    memset(hello, 'b', BUFFER_SIZE);
-
-    mtcp_write(ctx->mctx, socket_fd, hello, BUFFER_SIZE);
-
-    struct mtcp_epoll_event event;
-    event.events = MTCP_EPOLLIN;
-    event.data.sockid = socket_fd;
-
-    mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, socket_fd, &event);
-
-    return 0;
-}
-
-int handle_receive_request(struct thread_context* ctx, int epoll_id, int socket_fd) {
-    char hello_receive[BUFFER_SIZE];
-    clean_buffer(hello_receive);
-
-    mtcp_read(ctx->mctx, socket_fd, hello_receive, BUFFER_SIZE);
-
-    struct mtcp_epoll_event event;
-    event.events = MTCP_EPOLLOUT;
-    event.data.sockid = socket_fd;
-
-    mtcp_epoll_ctl(ctx->mctx, epoll_id, MTCP_EPOLL_CTL_MOD, socket_fd, &event);
-
-    return 0;
-}
-
-int mtcp_create_connection(struct thread_context* ctx) {
-    int client_fd;
-
-    client_fd = mtcp_socket(ctx->mctx, AF_INET, SOCK_STREAM, 0);
-    if(client_fd < 0) {
-        fprintf(stderr, "Deu ruim criando o socket client...");
-        return -1;
-    }
-
-    mtcp_setsock_nonblock(ctx->mctx, client_fd);
-
-    struct sockaddr_in addr;
-
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("192.168.1.1");
-    addr.sin_port = htons(PORT);
-
-    int ret = mtcp_connect(ctx->mctx, client_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in));
-    if(ret < 0 && errno != EINPROGRESS) {
-        mtcp_close(ctx->mctx, client_fd);
-        fprintf(stderr, "CUUUUUUUUUUUUUUU CLIENTE %i FALHOU NA CONEXAO %i\n", ctx->core, errno);
-        return -1;
-    }
-
-    struct mtcp_epoll_event event;
-
-    event.events = MTCP_EPOLLOUT;
-    event.data.sockid = client_fd;
-
-    mtcp_epoll_ctl(ctx->mctx, ctx->epoll_id, MTCP_EPOLL_CTL_ADD, client_fd, &event);
-
-    return client_fd;
 }
 
 struct thread_context* create_context(int core) {
