@@ -63,7 +63,7 @@ int main() {
     pthread_create(&threads[MAX_CPUS], NULL, &requests_counter_thread, NULL);
 
     int cores[MAX_CPUS];
-    int n_servers = 2;
+    int n_servers = 1;
     for(int i = 0; i < n_servers; i++) {
         cores[i] = i;
         pthread_create(&threads[i], NULL, &run_server, (void*) &cores[i]);
@@ -158,6 +158,7 @@ void* requests_counter_thread(void* arg) {
         diff = requests_counter - last_read;
         last_read = requests_counter;
  
+        printf("Requests: %i\n", diff);
         fprintf(file, "%i\n", diff);
 
         measures++;
@@ -284,7 +285,7 @@ int create_server_socket() {
 
 /* Create a non-blocking connection with an incoming client */
 void create_connection(int epoll_id, int listener_fd) {
-    // printf("\nCreating connection...\n");
+    //printf("\nCreating connection...\n");
 
     int client;
     struct sockaddr_in new_addr;

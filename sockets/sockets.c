@@ -10,6 +10,8 @@ int create_client_socket() {
         return -1;
     }
 
+    fcntl(client_fd, F_SETFL, O_NONBLOCK);
+
     return client_fd;
 }
 
