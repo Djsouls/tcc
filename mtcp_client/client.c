@@ -59,7 +59,7 @@ int main(int argc, char const* argv[])
 
     struct mtcp_conf mcfg;
 
-    int core_limit = 5;
+    int core_limit = 8;
     int num_cores = (core_limit >= MAX_CPUS) ? MAX_CPUS : core_limit + 1;
 
     mtcp_getconf(&mcfg);
@@ -238,7 +238,7 @@ void* client_thread(void* arg) {
         exit(EXIT_FAILURE);
     }
 
-    for(int i = 0; i < 4000; i++) {
+    for(int i = 0; i < 2000; i++) {
         mtcp_create_connection(ctx);
     }
 
@@ -257,13 +257,13 @@ void* client_thread(void* arg) {
             ev = incoming_events[i];
 
             if(ev.events & MTCP_EPOLLERR) {
-                printf("Deu merda aqui menor\n");
+                //printf("Deu merda aqui menor\n");
                 int err;
                 socklen_t len = sizeof(err);
 
                 if (mtcp_getsockopt(ctx->mctx, ev.data.sockid,
 							SOL_SOCKET, SO_ERROR, (void *)&err, &len) == 0) {
-                    printf("Erro: %i\n", err);
+                    //printf("Erro: %i\n", err);
 
                 }
             }
