@@ -40,7 +40,7 @@ bool done = false;
 
 int main(int argc, char const* argv[])
 {
-    int core_limit = 4;
+    int core_limit = 8;
 
     pthread_t threads[MAX_CPUS];
 
@@ -145,7 +145,7 @@ void* client_thread(void* arg) {
         exit(EXIT_FAILURE);
     }
 
-    for(int i = 0; i < 4000; i++) {
+    for(int i = 0; i < 2000; i++) {
         create_connection(epoll_id);
     }
 
