@@ -13,6 +13,8 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include <arpa/inet.h>
+
 #include <sys/socket.h>
 #include <sys/epoll.h>
 
@@ -63,7 +65,7 @@ int main() {
     pthread_create(&threads[MAX_CPUS], NULL, &requests_counter_thread, NULL);
 
     int cores[MAX_CPUS];
-    int n_servers = 1;
+    int n_servers = 2;
     for(int i = 0; i < n_servers; i++) {
         cores[i] = i;
         pthread_create(&threads[i], NULL, &run_server, (void*) &cores[i]);
@@ -263,7 +265,8 @@ int create_server_socket() {
     struct sockaddr_in server_address;
 
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = INADDR_ANY;
+    //server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_addr.s_addr = inet_addr("10.10.2.1");
     server_address.sin_port = htons(PORT);
 
     if(bind(listener, (struct sockaddr *) &server_address,
